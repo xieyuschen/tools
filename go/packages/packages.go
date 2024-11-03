@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -691,6 +692,7 @@ func (p *Package) String() string { return p.ID }
 // loaderPackage augments Package with state used during the loading phase
 type loaderPackage struct {
 	*Package
+
 	importErrors map[string]error // maps each bad import to its error
 	loadOnce     sync.Once
 	color        uint8 // for cycle detection
@@ -698,6 +700,13 @@ type loaderPackage struct {
 	needtypes    bool  // type information is either requested or depended on
 	initial      bool  // package was matched by a pattern
 	goVersion    int   // minor version number of go command on PATH
+
+	// transient fields
+	// todo: clear them after load
+	unfinishedImports *atomic.Int32
+	running           *atomic.Bool
+	done              *atomic.Bool
+	preds             map[*loaderPackage]struct{}
 }
 
 // loader holds the working state of a single call to load.
@@ -716,6 +725,9 @@ type loader struct {
 	// This makes it easier for us to get the conditions where
 	// we need certain modes right.
 	requestedMode LoadMode
+
+	// transient fields
+	g errgroup.Group
 }
 
 type parseValue struct {
@@ -727,6 +739,7 @@ type parseValue struct {
 func newLoader(cfg *Config) *loader {
 	ld := &loader{
 		parseCache: map[string]*parseValue{},
+		g:          errgroup.Group{},
 	}
 	if cfg != nil {
 		ld.Config = *cfg
@@ -812,12 +825,21 @@ func (ld *loader) refine(response *DriverResponse) ([]*Package, error) {
 			// ... or if we need types and the exportData is invalid. We fall back to (incompletely)
 			// typechecking packages from source if they fail to compile.
 			(ld.Mode&(NeedTypes|NeedTypesInfo) != 0 && exportDataInvalid)) && pkg.PkgPath != "unsafe"
+
+		unfinishedImports := &atomic.Int32{}
+		unfinishedImports.Add(int32(len(pkg.Imports)))
+
 		lpkg := &loaderPackage{
-			Package:   pkg,
-			needtypes: needtypes,
-			needsrc:   needsrc,
-			goVersion: response.GoVersion,
+			Package:           pkg,
+			needtypes:         needtypes,
+			needsrc:           needsrc,
+			goVersion:         response.GoVersion,
+			unfinishedImports: unfinishedImports,
+			done:              &atomic.Bool{},
+			running:           &atomic.Bool{},
+			preds:             map[*loaderPackage]struct{}{},
 		}
+
 		ld.pkgs[lpkg.ID] = lpkg
 		if rootIndex >= 0 {
 			initial[rootIndex] = lpkg
@@ -884,6 +906,7 @@ func (ld *loader) refine(response *DriverResponse) ([]*Package, error) {
 					lpkg.needsrc = true
 				}
 				lpkg.Imports[importPath] = imp.Package
+				imp.preds[lpkg] = struct{}{}
 			}
 
 			// Complete type information is required for the
@@ -909,7 +932,6 @@ func (ld *loader) refine(response *DriverResponse) ([]*Package, error) {
 		for _, lpkg := range initial {
 			visit(lpkg)
 		}
-
 	} else {
 		// !NeedImports: drop the stub (ID-only) import packages
 		// that we are not even going to try to resolve.
@@ -921,15 +943,11 @@ func (ld *loader) refine(response *DriverResponse) ([]*Package, error) {
 	// Load type data and syntax if needed, starting at
 	// the initial packages (roots of the import DAG).
 	if ld.Mode&NeedTypes != 0 || ld.Mode&NeedSyntax != 0 {
-		var wg sync.WaitGroup
 		for _, lpkg := range initial {
-			wg.Add(1)
-			go func(lpkg *loaderPackage) {
-				ld.loadRecursive(lpkg)
-				wg.Done()
-			}(lpkg)
+			ld.enqueue(lpkg)
 		}
-		wg.Wait()
+
+		ld.g.Wait()
 	}
 
 	// If the context is done, return its error and
@@ -991,6 +1009,46 @@ func (ld *loader) refine(response *DriverResponse) ([]*Package, error) {
 	}
 
 	return result, nil
+}
+
+var limiter = make(chan struct{}, runtime.GOMAXPROCS(0))
+
+func (ld *loader) enqueue(lpkg *loaderPackage) {
+	ld.g.Go(func() error {
+		limiter <- struct{}{}
+		defer func() { <-limiter }()
+		// some imports are not finished, so need to wait
+		if lpkg.unfinishedImports.Load() != 0 {
+			for _, ipkg := range lpkg.Imports {
+				imp := ld.pkgs[ipkg.ID]
+				ld.enqueue(imp)
+			}
+			return nil
+		}
+
+		// this package is done already, need do nothing
+		if lpkg.done.Load() {
+			return nil
+		}
+
+		if !lpkg.running.CompareAndSwap(false, true) {
+			return nil // another place is running, skip it
+		}
+
+		// all imports are ready, so load lpkg as well
+		ld.loadPackage(lpkg)
+
+		// after lpkg is ready, decrease all parents reference
+		// if this makes parent ready, enqueue parent to start load as well
+		for pred := range lpkg.preds {
+			if pred.unfinishedImports.Add(-1) == 0 {
+				ld.enqueue(pred)
+			}
+		}
+		lpkg.done.Store(true)
+		lpkg.running.Store(false)
+		return nil
+	})
 }
 
 // loadRecursive loads the specified package and its dependencies,
