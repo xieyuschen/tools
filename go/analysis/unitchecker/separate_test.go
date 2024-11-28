@@ -91,8 +91,9 @@ func MyPrintf(format string, args ...any) {
 
 	// Load metadata for the main package and all its dependencies.
 	cfg := &packages.Config{
-		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedImports | packages.NeedModule,
-		Dir:  tmpdir,
+		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
+			packages.NeedImports | packages.NeedModule | packages.NeedDeps,
+		Dir: tmpdir,
 		Env: append(os.Environ(),
 			"GOPROXY=off", // disable network
 			"GOWORK=off",  // an ambient GOWORK value would break package loading

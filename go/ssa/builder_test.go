@@ -665,7 +665,6 @@ var indirect = R[int].M
 }
 
 // TestTypeparamTest builds SSA over compilable examples in $GOROOT/test/typeparam/*.go.
-
 func TestTypeparamTest(t *testing.T) {
 	testenv.NeedsGOROOTDir(t, "test")
 

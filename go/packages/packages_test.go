@@ -143,7 +143,7 @@ func testLoadImportsGraph(t *testing.T, exporter packagestest.Exporter) {
 			"f/f.go":             `package f`,
 		}}})
 	defer exported.Cleanup()
-	exported.Config.Mode = packages.LoadImports
+	exported.Config.Mode = packages.LoadImports | packages.NeedDeps
 	initial, err := packages.Load(exported.Config, "golang.org/fake/c", "golang.org/fake/subdir/d", "golang.org/fake/e")
 	if err != nil {
 		t.Fatal(err)
@@ -650,7 +650,7 @@ func testLoadTypesBits(t *testing.T, exporter packagestest.Exporter) {
 		}}})
 	defer exported.Cleanup()
 
-	exported.Config.Mode = packages.NeedTypes | packages.NeedImports
+	exported.Config.Mode = packages.NeedTypes | packages.NeedImports | packages.NeedDeps
 	initial, err := packages.Load(exported.Config, "golang.org/fake/a", "golang.org/fake/c")
 	if err != nil {
 		t.Fatal(err)
@@ -726,7 +726,7 @@ func testLoadSyntaxOK(t *testing.T, exporter packagestest.Exporter) {
 		}}})
 	defer exported.Cleanup()
 
-	exported.Config.Mode = packages.LoadSyntax
+	exported.Config.Mode = packages.LoadAllSyntax
 	initial, err := packages.Load(exported.Config, "golang.org/fake/a", "golang.org/fake/c")
 	if err != nil {
 		t.Fatal(err)
@@ -755,12 +755,12 @@ func testLoadSyntaxOK(t *testing.T, exporter packagestest.Exporter) {
 		wantSyntax   bool
 		wantComplete bool
 	}{
-		{"golang.org/fake/a", true, true},   // source package
-		{"golang.org/fake/b", true, true},   // source package because depends on initial package
-		{"golang.org/fake/c", true, true},   // source package
-		{"golang.org/fake/d", false, true},  // export data package
-		{"golang.org/fake/e", false, false}, // export data package
-		{"golang.org/fake/f", false, false}, // export data package
+		{"golang.org/fake/a", true, true}, // source package
+		{"golang.org/fake/b", true, true}, // source package because depends on initial package
+		{"golang.org/fake/c", true, true}, // source package
+		{"golang.org/fake/d", true, true}, // source package
+		{"golang.org/fake/e", true, true}, // source package
+		{"golang.org/fake/f", true, true}, // source package
 	} {
 		// TODO(matloob): LoadSyntax and LoadAllSyntax are now equivalent, wantSyntax and wantComplete
 		// are true for all packages in the transitive dependency set. Add test cases on the individual
@@ -815,7 +815,7 @@ func testLoadDiamondTypes(t *testing.T, exporter packagestest.Exporter) {
 		}}})
 	defer exported.Cleanup()
 
-	exported.Config.Mode = packages.LoadSyntax
+	exported.Config.Mode = packages.LoadAllSyntax
 	initial, err := packages.Load(exported.Config, "golang.org/fake/a")
 	if err != nil {
 		t.Fatal(err)
@@ -860,7 +860,7 @@ func testLoadSyntaxError(t *testing.T, exporter packagestest.Exporter) {
 		}}})
 	defer exported.Cleanup()
 
-	exported.Config.Mode = packages.LoadSyntax
+	exported.Config.Mode = packages.LoadAllSyntax
 	initial, err := packages.Load(exported.Config, "golang.org/fake/a", "golang.org/fake/c")
 	if err != nil {
 		t.Fatal(err)
@@ -881,7 +881,7 @@ func testLoadSyntaxError(t *testing.T, exporter packagestest.Exporter) {
 		{"golang.org/fake/c", true, true},
 		{"golang.org/fake/d", true, true},
 		{"golang.org/fake/e", true, true},
-		{"golang.org/fake/f", false, false},
+		{"golang.org/fake/f", true, false},
 	} {
 		p := all[test.id]
 		if p == nil {
@@ -1344,7 +1344,7 @@ func testJSON(t *testing.T, exporter packagestest.Exporter) {
 		}}})
 	defer exported.Cleanup()
 
-	exported.Config.Mode = packages.LoadImports
+	exported.Config.Mode = packages.LoadImports | packages.NeedDeps
 	initial, err := packages.Load(exported.Config, "golang.org/fake/c", "golang.org/fake/d")
 	if err != nil {
 		t.Fatal(err)
@@ -1924,7 +1924,7 @@ func TestLoadImportsC(t *testing.T) {
 
 	cfg := &packages.Config{
 		Context: testCtx,
-		Mode:    packages.LoadImports,
+		Mode:    packages.LoadImports | packages.NeedDeps,
 		Tests:   true,
 	}
 	initial, err := packages.Load(cfg, "syscall", "net")
@@ -2077,7 +2077,11 @@ func testIssue32814(t *testing.T, exporter packagestest.Exporter) {
 		Files: map[string]interface{}{}}})
 	defer exported.Cleanup()
 
-	exported.Config.Mode = packages.NeedName | packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo | packages.NeedTypesSizes
+	// todo(yuchen): without NeedDeps, the package.Load reports error:
+	// package "testing" without types was imported from "fmt_test [fmt.test]"
+	exported.Config.Mode = packages.NeedName | packages.NeedTypes | packages.NeedSyntax |
+		packages.NeedTypesInfo | packages.NeedTypesSizes | packages.NeedDeps
+
 	pkgs, err := packages.Load(exported.Config, "fmt")
 
 	if err != nil {
@@ -2999,30 +3003,6 @@ func constant(p *packages.Package, name string) *types.Const {
 	return c.(*types.Const)
 }
 
-func copyAll(srcPath, dstPath string) error {
-	return filepath.Walk(srcPath, func(path string, info os.FileInfo, _ error) error {
-		if info.IsDir() {
-			return nil
-		}
-		contents, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(srcPath, path)
-		if err != nil {
-			return err
-		}
-		dstFilePath := strings.Replace(filepath.Join(dstPath, rel), "definitelynot_go.mod", "go.mod", -1)
-		if err := os.MkdirAll(filepath.Dir(dstFilePath), 0755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(dstFilePath, contents, 0644); err != nil {
-			return err
-		}
-		return nil
-	})
-}
-
 func TestExportFile(t *testing.T) {
 	// This used to trigger the log.Fatal in loadFromExportData.
 	// See go.dev/issue/45584.
@@ -3112,6 +3092,106 @@ func overlayFS(overlay map[string][]byte) fstest.MapFS {
 		fs[name] = &fstest.MapFile{Data: data}
 	}
 	return fs
+}
+
+func TestIssue56633(t *testing.T) {
+	testCases := []struct {
+		name     string
+		mode     packages.LoadMode
+		verifyFn func(*testing.T, []*packages.Package)
+	}{
+		{
+			"NeedImports and NeedDeps are both specified",
+			packages.NeedImports |
+				packages.NeedCompiledGoFiles |
+				packages.NeedDeps,
+			func(t *testing.T, p []*packages.Package) {
+				packages.Visit(p, nil, func(p *packages.Package) {
+					// NeedCompiledGoFiles should be propagated to every transitive packages
+					if len(p.CompiledGoFiles) != 1 {
+						t.Fatalf("NeedCompiledGoFiles should be fully propagated across import graph")
+					}
+				})
+			},
+		},
+		{
+			"NeedImports is specified and NeedDeps is not specified",
+			packages.NeedImports |
+				packages.NeedCompiledGoFiles,
+			func(t *testing.T, pkgs []*packages.Package) {
+				aImports := pkgs[0].Imports
+				if len(aImports) != 1 {
+					t.Fatalf("package a should have 1 import package only")
+				}
+				var pkgB *packages.Package
+				for _, p := range aImports {
+					pkgB = p
+				}
+				if pkgB == nil {
+					t.Fatalf("package b shouldn't be nil")
+				}
+
+				// NeedImports mode makes the NeedCompiledGoFiles to be propagated 1 depth only,
+				// so it should be propagated from pkg1 to pkgB and end up propagating at pkgB.
+				// We check the import of pkgB to ensure packages.NeedCompiledGoFiles is not propagated
+				for name, p := range pkgB.Imports {
+					if len(p.CompiledGoFiles) != 0 {
+						t.Fatalf("NeedCompiledGoFiles should propagate 1 depth only, but it reaches %s",
+							name)
+					}
+				}
+			},
+		},
+		{
+			"NeedImports is not specified and NeedDeps is specified",
+			packages.NeedDeps |
+				packages.NeedCompiledGoFiles,
+			func(t *testing.T, pkgs []*packages.Package) {
+				for _, p := range pkgs {
+					if len(p.Imports) != 0 {
+						t.Fatalf("Imports field of package %s should be empty", p.ID)
+					}
+				}
+			},
+		},
+		{
+			"NeedImports is not specified and NeedDeps is not specified",
+			packages.NeedCompiledGoFiles,
+			func(t *testing.T, pkgs []*packages.Package) {
+				for _, p := range pkgs {
+					if len(p.Imports) != 0 {
+						t.Fatalf("Imports field of package %s should be empty", p.ID)
+					}
+				}
+			},
+		},
+	}
+
+	overlay := map[string][]byte{
+		"go.mod": []byte("module golang.org/fake"),
+		"a/a.go": []byte(`package a; import "golang.org/fake/b"; type A = b.B`),
+		"b/b.go": []byte(`package b; import "golang.org/fake/c"; type B = c.C`),
+		"c/c.go": []byte(`package c; type C struct{}`),
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &packages.Config{
+				Mode:    tc.mode,
+				Overlay: overlay,
+				Env: append(
+					os.Environ(),
+					"GO111MODULES=on",
+					"GOPATH=",
+					"GOWORK=off",
+					"GOPROXY=off"),
+			}
+			pkgs, err := packages.Load(cfg, "golang.org/fake/a")
+			if err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			tc.verifyFn(t, pkgs)
+		})
+	}
 }
 
 // TestIssue69606a tests when tools in $GOROOT/pkg/tool/$GOOS_$GOARCH are missing,

@@ -72,7 +72,6 @@ func fix(t *testing.T, dir, analyzers string, wantExit int, patterns ...string) 
 		"GOPATH="+dir,
 		"GO111MODULE=off",
 		"GOPROXY=off")
-
 	clean := func(s string) string {
 		return strings.ReplaceAll(s, os.TempDir(), "os.TempDir/")
 	}

@@ -79,7 +79,7 @@ func testLoad(t *testing.T, minPkgs int, patterns ...string) {
 	t0 := time.Now()
 	alloc0 := bytesAllocated()
 
-	cfg := &packages.Config{Mode: packages.LoadSyntax}
+	cfg := &packages.Config{Mode: packages.LoadAllSyntax}
 	pkgs, err := packages.Load(cfg, patterns...)
 	if err != nil {
 		t.Fatal(err)

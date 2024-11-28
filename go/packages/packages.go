@@ -59,7 +59,6 @@ import (
 //
 // Unfortunately there are a number of open bugs related to
 // interactions among the LoadMode bits:
-//   - https://github.com/golang/go/issues/56633
 //   - https://github.com/golang/go/issues/56677
 //   - https://github.com/golang/go/issues/58726
 //   - https://github.com/golang/go/issues/63517
@@ -79,7 +78,8 @@ const (
 	// "placeholder" Packages with only the ID set.
 	NeedImports
 
-	// NeedDeps adds the fields requested by the LoadMode in the packages in Imports.
+	// NeedDeps causes all Packages transitively reachable through
+	// the Imports map to also be populated according to the LoadMode.
 	NeedDeps
 
 	// NeedExportFile adds ExportFile.
@@ -842,8 +842,14 @@ func (ld *loader) refine(response *DriverResponse) ([]*Package, error) {
 		// dependency on a package that does. These are the only packages
 		// for which we load source code.
 		var stack []*loaderPackage
-		var visit func(from, lpkg *loaderPackage) bool
-		visit = func(from, lpkg *loaderPackage) bool {
+
+		initialSet := make(map[string]struct{})
+		for _, lpkg := range initial {
+			initialSet[lpkg.ID] = struct{}{}
+		}
+
+		var visit func(from, lpkg *loaderPackage, initial bool) bool
+		visit = func(from, lpkg *loaderPackage, initial bool) bool {
 			if lpkg.color == grey {
 				panic("internal error: grey node")
 			}
@@ -851,7 +857,12 @@ func (ld *loader) refine(response *DriverResponse) ([]*Package, error) {
 				lpkg.color = grey
 				stack = append(stack, lpkg) // push
 				stubs := lpkg.Imports       // the structure form has only stubs with the ID in the Imports
-				lpkg.Imports = make(map[string]*Package, len(stubs))
+
+				// reset the Import map only if it's initial package or NeedDeps is given
+				if initial || ld.Mode&NeedDeps != 0 {
+					lpkg.Imports = make(map[string]*Package, len(stubs))
+				}
+
 				for importPath, ipkg := range stubs {
 					var importErr error
 					imp := ld.pkgs[ipkg.ID]
@@ -869,10 +880,16 @@ func (ld *loader) refine(response *DriverResponse) ([]*Package, error) {
 						continue
 					}
 
-					if visit(lpkg, imp) {
-						lpkg.needsrc = true
+					// we won't continue to visit the underlying imports when the lpkg isn't a initial
+					// package and the NeedDeps is not provided.
+					if _, ok := initialSet[imp.ID]; ok || ld.Mode&NeedDeps != 0 || initial {
+						// ok means the following function call visits an initial as well
+						// otherwise, the ok will be false
+						if visit(lpkg, imp, ok) {
+							lpkg.needsrc = true
+						}
+						lpkg.Imports[importPath] = imp.Package
 					}
-					lpkg.Imports[importPath] = imp.Package
 				}
 
 				// -- postorder --
@@ -892,11 +909,18 @@ func (ld *loader) refine(response *DriverResponse) ([]*Package, error) {
 				}
 
 				// Add packages with no imports directly to the queue of leaves.
-				if len(lpkg.Imports) == 0 {
+				// if the initial package doesn't have Imports, we should treat it as a leaf
+				if (len(lpkg.Imports) == 0 && initial) ||
+					// NeedDeps check is needed because when it's not specified Imports field is un-reliable
+					(len(lpkg.Imports) == 0 && ld.Mode&NeedDeps != 0) ||
+					// if it's not an initial and NeedDeps is not enabled,
+					// the lpkg should be treated as a leaf as we won't continue for its Imports
+					(!initial && ld.Mode&NeedDeps == 0) {
 					leaves = append(leaves, lpkg)
 				}
 
 				stack = stack[:len(stack)-1] // pop
+
 				lpkg.color = black
 			}
 
@@ -911,7 +935,7 @@ func (ld *loader) refine(response *DriverResponse) ([]*Package, error) {
 
 		// For each initial package, create its import DAG.
 		for _, lpkg := range initial {
-			visit(nil, lpkg)
+			visit(nil, lpkg, true)
 		}
 
 	} else {
@@ -1079,7 +1103,6 @@ func (ld *loader) loadPackage(lpkg *loaderPackage) {
 		}
 		return // not a source package, don't get syntax trees
 	}
-
 	appendError := func(err error) {
 		// Convert various error types into the one true Error.
 		var errs []Error
@@ -1221,6 +1244,13 @@ func (ld *loader) loadPackage(lpkg *loaderPackage) {
 
 		if ipkg.Types != nil && ipkg.Types.Complete() {
 			return ipkg.Types, nil
+		}
+
+		if ipkg.Types == nil && ld.Mode&NeedDeps == 0 {
+			return nil, fmt.Errorf(
+				"package %q without types was imported from %q, consider to load pacakges with NeedDeps",
+				path, lpkg,
+			)
 		}
 		log.Fatalf("internal error: package %q without types was imported from %q", path, lpkg)
 		panic("unreachable")
