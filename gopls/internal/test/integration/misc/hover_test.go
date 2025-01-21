@@ -114,6 +114,127 @@ func main() {
 	})
 }
 
+func TestHoverAlias(t *testing.T) {
+	testCases := []struct {
+		description string
+		source      string
+	}{
+		{
+			description: "alias and type definition in the same file",
+			source: `
+-- main.go --
+package main
+
+// This is a dog.
+type Dog struct {
+    Name string 
+    Age int
+}
+
+type Hound = Dog
+
+// A Puppy is a Dog with an age less than 2.
+type Puppy = Dog
+`,
+		},
+		{
+			description: "alias and type definition with type param",
+			source: `
+-- main.go --
+package main
+
+// This is a dog.
+type Dog[T any] struct {
+    Name string 
+    Age int
+	Addon T
+}
+
+type Hound[T any] = Dog[T]
+
+// A Puppy is a Dog with an age less than 2.
+type Puppy[T any] = Dog[T]`,
+		},
+		{
+			description: "alias and type definition in different packages",
+			source: `
+-- go.mod --
+module mod.com
+
+-- main.go --
+package main
+
+import "mod.com/a"
+
+type Hound = a.Dog
+
+// A Puppy is a Dog with an age less than 2.
+type Puppy = a.Dog
+
+-- a/a.go --
+package a
+// This is a dog.
+type Dog struct {
+    Name string 
+    Age int
+}
+`,
+		},
+		{
+			description: "find comment recursively",
+			source: `
+-- go.mod --
+module mod.com
+
+-- main.go --
+package main
+
+import "mod.com/a"
+
+type Hound = a.Dog
+
+type Puppy = a.Dog1
+
+-- a/a.go --
+package a
+import "mod.com/b"
+
+type Dog = b.Dog
+
+// A Puppy is a Dog with an age less than 2.
+type Dog1 = b.Dog
+
+-- b/b.go
+package b
+// This is a dog.
+type Dog struct {
+    Name string 
+    Age int
+}
+`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			Run(t, tc.source, func(t *testing.T, env *Env) {
+				env.OpenFile("main.go")
+				got, _ := env.Hover(env.RegexpSearch("main.go", "Hound"))
+				expectedComment := "This is a dog."
+				if got != nil && !strings.Contains(got.Value, expectedComment) {
+					t.Errorf("Hover: missing expected field '%s'. Got:\n%q", expectedComment, got.Value)
+				}
+
+				expectedComment = "A Puppy is a Dog with an age less than 2."
+				got, _ = env.Hover(env.RegexpSearch("main.go", "Puppy"))
+				if got != nil && !strings.Contains(got.Value, expectedComment) {
+					t.Errorf("Hover: missing expected field '%s'. Got:\n%q", expectedComment, got.Value)
+				}
+			})
+		})
+	}
+}
+
 // Tests that hovering does not trigger the panic in golang/go#48249.
 func TestPanicInHoverBrokenCode(t *testing.T) {
 	// Note: this test can not be expressed as a marker test, as it must use

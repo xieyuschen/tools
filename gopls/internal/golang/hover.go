@@ -258,6 +258,7 @@ func hover(ctx context.Context, snapshot *cache.Snapshot, fh file.Handle, pp pro
 	// The general case: compute hover information for the object referenced by
 	// the identifier at pos.
 	ident, obj, selectedType := referencedObject(pkg, pgf, pos)
+
 	if obj == nil || ident == nil {
 		return protocol.Range{}, nil, nil // no object to hover
 	}
@@ -303,9 +304,39 @@ func hover(ctx context.Context, snapshot *cache.Snapshot, fh file.Handle, pp pro
 	if err != nil {
 		return protocol.Range{}, nil, fmt.Errorf("re-parsing declaration of %s: %v", obj.Name(), err)
 	}
-	decl, spec, field := findDeclInfo([]*ast.File{declPGF.File}, declPos) // may be nil^3
-	comment := chooseDocComment(decl, spec, field)
-	docText := comment.Text()
+
+	// findDocument helps to find a document for a given object,
+	// if it's an alias, it will recursively visit its Rhs until we find a document,
+	// or end up at a NamedType.
+	var findDocument func(typ types.Object) string
+	findDocument = func(obj types.Object) string {
+		declPGF1, declPos1, _ := parseFull(ctx, snapshot, pkg.FileSet(), obj.Pos())
+		decl, spec, field := findDeclInfo([]*ast.File{declPGF1.File}, declPos1) // may be nil^3
+		comment := chooseDocComment(decl, spec, field)
+		docText := comment.Text()
+		// return the first non-nil doc for an alias.
+		if docText != "" {
+			return docText
+		}
+		if alias, ok := obj.Type().(*types.Alias); ok {
+			if alias.Obj() != nil && alias.Obj().IsAlias() {
+				rhs := alias.Rhs()
+				switch o := rhs.(type) {
+				case *types.Named:
+					return findDocument(o.Obj())
+				case *types.Alias:
+					return findDocument(o.Obj())
+				default:
+					fmt.Println("+", o.String())
+				}
+			}
+		}
+
+		return ""
+	}
+
+	_, spec, field := findDeclInfo([]*ast.File{declPGF.File}, declPos) // may be nil^3
+	docText := findDocument(obj)
 
 	// By default, types.ObjectString provides a reasonable signature.
 	signature := objectString(obj, qual, declPos, declPGF.Tok, spec)
