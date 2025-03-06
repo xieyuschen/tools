@@ -499,6 +499,9 @@ existing code by using more modern features of Go, such as:
     for i := range n {}, added in go1.22;
   - replacing Split in "for range strings.Split(...)" by go1.24's
     more efficient SplitSeq, or Fields with FieldSeq;
+  - replacing HasPrefix and TrimPrefix in "if strings.HasPrefix(s, pre) { use(strings.TrimPrefix(s, pre)) }"
+    or "if after := strings.TrimPrefix(s, pre); after != s { use(after) } " by
+    "if after,ok := strings.CutPrefix(s, pre); ok { use(after) }"
 
 To apply all modernization fixes en masse, you can use the
 following command:

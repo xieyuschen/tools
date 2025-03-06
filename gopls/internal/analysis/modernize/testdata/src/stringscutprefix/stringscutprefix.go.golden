@@ -1,0 +1,101 @@
+package stringscutprefix
+
+import (
+    "bytes"
+	"strings"
+)
+
+// test the pattern 1
+func _() {
+	var s, pre string
+	if after, ok := strings.CutPrefix(s, pre); ok { // want "if statement can be modernized using strings.CutPrefix"
+	    a := after
+		_ = a
+	}
+	if after, ok := strings.CutPrefix("", ""); ok { // want "if statement can be modernized using strings.CutPrefix"
+        a := after
+		_ = a
+	}
+	if after, ok := strings.CutPrefix(s, ""); ok { // want "if statement can be modernized using strings.CutPrefix"
+        println([]byte(after))
+	}
+	if after, ok := strings.CutPrefix(s, ""); ok { // want "if statement can be modernized using strings.CutPrefix"
+		a, b := "", after
+		_, _ = a, b
+	}
+    var bss, bspre []byte
+    if after, ok := bytes.CutPrefix(bss, bspre); ok { // want "if statement can be modernized using strings.CutPrefix"
+        a := after
+        _ = a
+    }
+    if after, ok := bytes.CutPrefix([]byte(""), []byte("")); ok { // want "if statement can be modernized using strings.CutPrefix"
+        a := after
+        _ = a
+    }
+    var a, b string
+    if after, ok := strings.CutPrefix(s, ""); ok { // want "if statement can be modernized using strings.CutPrefix"
+        a, b = "", after
+        _, _ = a, b
+    }
+
+
+	ok := strings.HasPrefix("", "")
+	if ok { // noop, currently it doesn't track the result usage of HasPrefix
+		a := strings.TrimPrefix("", "")
+		_ = a
+	}
+
+	if strings.HasPrefix(s, pre) {
+		a := strings.TrimPrefix("", "") // noop, as the argument isn't the same
+		_ = a
+	}
+
+	if strings.HasPrefix("", "") {
+		a := strings.TrimPrefix(s, pre) // noop, as the argument isn't the same
+		_ = a
+	}
+}
+var value0 string
+
+// test pattern2
+func _() {
+	var s, pre string
+	if after, ok := strings.CutPrefix(s, pre); ok { // want "if statement can be modernized using strings.CutPrefix"
+		println(after)
+	}
+	if after, ok := strings.CutPrefix(s, pre); ok { // want "if statement can be modernized using strings.CutPrefix"
+		println(after)
+	}
+    if after, ok := strings.CutPrefix(s, pre); ok { // want "if statement can be modernized using strings.CutPrefix"
+        println(strings.TrimPrefix(s, pre)) // noop here
+    }
+    if after, ok := strings.CutPrefix(s, ""); ok { // want "if statement can be modernized using strings.CutPrefix"
+        println(after)
+    }
+    var predefined string
+	if predefined0, ok := strings.CutPrefix(s, pre); ok { // want "if statement can be modernized using strings.CutPrefix"
+		predefined = predefined0
+		println(predefined)
+	}
+	var value string
+	if value1, ok := strings.CutPrefix(s, pre); ok { // want "if statement can be modernized using strings.CutPrefix"
+		value = value1
+		println(value)
+	}
+
+
+    if after := strings.TrimPrefix(s, pre); s != pre { // noop
+        println(after)
+    }
+    if after := strings.TrimPrefix(s, pre); after != pre { // noop
+        println(after)
+    }
+}
+
+// the uncovered cases now, but possible to support in the future.
+func _() {
+	var s, pre string
+	if strings.TrimPrefix(s, pre) != s {
+		println(strings.TrimPrefix(s, pre))
+	}
+}

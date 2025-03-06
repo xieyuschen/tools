@@ -75,6 +75,7 @@ func run(pass *analysis.Pass) (any, error) {
 	stringsseq(pass)
 	sortslice(pass)
 	testingContext(pass)
+	stringscutprefix(pass)
 
 	// TODO(adonovan):
 	// - more modernizers here; see #70815.

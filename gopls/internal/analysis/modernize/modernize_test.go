@@ -27,5 +27,6 @@ func Test(t *testing.T) {
 		"fieldsseq",
 		"sortslice",
 		"testingcontext",
+		"stringscutprefix",
 	)
 }
