@@ -43,7 +43,7 @@ var goplsStar = map[prop]int{
 	{"TextDocumentClientCapabilities", "codeAction"}:          wantOpt,     // A.B.C.D
 	{"TextDocumentClientCapabilities", "completion"}:          wantOpt,     // A.B.C.D
 	{"TextDocumentClientCapabilities", "documentSymbol"}:      wantOpt,     // A.B.C.D
-	{"TextDocumentClientCapabilities", "publishDiagnostics"}:  wantOpt,     //A.B.C.D
+	{"TextDocumentClientCapabilities", "publishDiagnostics"}:  wantOpt,     // A.B.C.D
 	{"TextDocumentClientCapabilities", "semanticTokens"}:      wantOpt,     // A.B.C.D
 	{"TextDocumentContentChangePartial", "range"}:             wantOptStar, // == nil test
 	{"TextDocumentSyncOptions", "change"}:                     wantOpt,     // &constant
@@ -258,7 +258,7 @@ var methodNames = map[string]string{
 	"workspace/symbol":                       "Symbol",
 	"workspace/textDocumentContent":          "TextDocumentContent",
 	"workspace/textDocumentContent/refresh":  "TextDocumentContentRefresh",
-	"workspace/willCreateFiles":              "WillCreateFiles",
+	"workspace/willCreateFiles":              "DidCreateFiles",
 	"workspace/willDeleteFiles":              "WillDeleteFiles",
 	"workspace/willRenameFiles":              "WillRenameFiles",
 	"workspace/workspaceFolders":             "WorkspaceFolders",

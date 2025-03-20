@@ -34,8 +34,8 @@ func (s *server) DidCloseNotebookDocument(context.Context, *protocol.DidCloseNot
 	return notImplemented("DidCloseNotebookDocument")
 }
 
-func (s *server) DidCreateFiles(context.Context, *protocol.CreateFilesParams) error {
-	return notImplemented("DidCreateFiles")
+func (s *server) WillCreateFiles(context.Context, *protocol.CreateFilesParams) (*protocol.WorkspaceEdit, error) {
+	return nil, notImplemented("DidCreateFiles")
 }
 
 func (s *server) DidDeleteFiles(context.Context, *protocol.DeleteFilesParams) error {
@@ -128,10 +128,6 @@ func (s *server) Subtypes(context.Context, *protocol.TypeHierarchySubtypesParams
 
 func (s *server) Supertypes(context.Context, *protocol.TypeHierarchySupertypesParams) ([]protocol.TypeHierarchyItem, error) {
 	return nil, notImplemented("Supertypes")
-}
-
-func (s *server) WillCreateFiles(context.Context, *protocol.CreateFilesParams) (*protocol.WorkspaceEdit, error) {
-	return nil, notImplemented("WillCreateFiles")
 }
 
 func (s *server) WillDeleteFiles(context.Context, *protocol.DeleteFilesParams) (*protocol.WorkspaceEdit, error) {
