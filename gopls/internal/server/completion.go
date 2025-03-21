@@ -27,6 +27,7 @@ func (s *server) Completion(ctx context.Context, params *protocol.CompletionPara
 		recordLatency(ctx, rerr)
 	}()
 
+	event.Log(ctx, "+ ycx: try whether the log could show in vscode debug")
 	ctx, done := event.Start(ctx, "lsp.Server.completion", label.URI.Of(params.TextDocument.URI))
 	defer done()
 

@@ -29,9 +29,10 @@ import (
 //   - the file has _test.go suffix
 //     => append a _test suffix after the package name got from factor1
 func (s *server) DidCreateFiles(ctx context.Context, params *protocol.CreateFilesParams) error {
+	event.Log(ctx, fmt.Sprintf("+ ycx start to handle didCreateFiles event"))
 	ctx, done := event.Start(ctx, "lsp.Server.didCreateFiles")
 	defer done()
-	event.Log(ctx, fmt.Sprintf("++ start to handle willCreateFiles event"))
+
 	for _, fileCreate := range params.Files {
 		event.Log(ctx, fmt.Sprintf("++ %s", fileCreate.URI))
 		uri := protocol.DocumentURI(fileCreate.URI)
@@ -67,9 +68,14 @@ func (s *server) DidCreateFiles(ctx context.Context, params *protocol.CreateFile
 				result, err := s.client.ApplyEdit(ctx, &protocol.ApplyWorkspaceEditParams{
 					Edit: *protocol.NewWorkspaceEdit(edit),
 				})
-
-				fmt.Println("++")
-				fmt.Println(result, err)
+				if err != nil {
+					event.Log(ctx, err.Error())
+					continue
+				}
+				if !result.Applied {
+					event.Log(ctx, result.FailureReason)
+					continue
+				}
 			}
 		}
 	}
