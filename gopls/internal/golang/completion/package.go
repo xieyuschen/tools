@@ -27,9 +27,9 @@ import (
 	"golang.org/x/tools/gopls/internal/util/safetoken"
 )
 
-// packageClauseCompletions offers completions for a package declaration when
+// PackageClauseCompletions offers completions for a package declaration when
 // one is not present in the given file.
-func packageClauseCompletions(ctx context.Context, snapshot *cache.Snapshot, fh file.Handle, position protocol.Position) ([]CompletionItem, *Selection, error) {
+func PackageClauseCompletions(ctx context.Context, snapshot *cache.Snapshot, fh file.Handle, position protocol.Position) ([]CompletionItem, *Selection, error) {
 	// We know that the AST for this file will be empty due to the missing
 	// package declaration, but parse it anyway to get a mapper.
 	// TODO(adonovan): opt: there's no need to parse just to get a mapper.
